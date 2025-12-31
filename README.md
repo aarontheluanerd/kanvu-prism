@@ -27,4 +27,4 @@ Browser: Just drop it somewhere you like, don't forget to add the "HTTP" folder 
 
 #### one recommendation
 
-I'm open-sourcing a "DNS" script w/ a simple site router thingy, you can use it when integrating prism but feel free to make your own DNS. [Link Here](https://example.com)
+I'm open-sourcing a "DNS" script w/ a simple site router thingy, you can use it when integrating prism but feel free to make your own DNS. [Link Here](https://github.com/aarontheluanerd/openresolve-roblox-dns)
