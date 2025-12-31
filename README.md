@@ -1,4 +1,4 @@
-![Prism Browser Logo](./res/header.png)
+![Prism Browser Logo](./res/header2.png)
 # Kanvu Prism
 
 this is just a repo that hosts some .rbxm files
