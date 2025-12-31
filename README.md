@@ -1,3 +1,4 @@
+![Prism Browser Logo](./res/BrowserLogo.png)
 # Kanvu Prism
 
 this is just a repo that hosts some .rbxm files
