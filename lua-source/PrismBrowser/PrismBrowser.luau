@@ -1,7 +1,7 @@
 --!nonstrict
 -- READ BELOW!
 --[[
-	When implementing this, don't forget to add a way to store cookies.
+	When implementing this, don't forget to add a way to store cookies & bookmarks.
 	Sorry for any bad code, this is just a guide on how to "properly" implement the Prism WebView Engine.
 	But using it as a browser base is fine, too.
 	
@@ -18,8 +18,10 @@ local Animations = require(script.Animations)
 local FeatureFlags = require(script.FeatureFlags)
 local FeatureFlagBehavior = require(script.FeatureFlagBehavior)
 
-local BrowserConfig = require(script.Config)
+local BrowserConfig = require(script.Config)				
+
 local cookieStorage = {}
+local bookmarksData = {}
 
 local plr = game.Players.LocalPlayer
 local mouse = plr:GetMouse()
@@ -145,31 +147,31 @@ local assetTypeCheckInstances = script.Parent:WaitForChild("assetTypeCheckInstan
 local WebView = Loader.new({
 	DefaultFavicon = BrowserConfig.DefaultFavicon,
 	OnCookieGet = function(requestingFrame : Frame, cookieName : string)
-		
+
 		local requestingTab = nil
-		
+
 		for _, tab in pairs(TabDataStorage) do
 			if tab.Frame == requestingFrame then
 				requestingTab = tab
 				break
 			end
 		end
-		
+
 		if not requestingTab then return end
-		
+
 		local domain = string.split(string.lower(requestingTab.CurrentURL), "/")[1]
-		
+
 		for GUID, cookie in pairs(cookieStorage) do
 			if cookieName == cookie.Name and table.find(cookie.applyingDomains, domain) then
 				return cookie.Contents
 			end
 		end
-		
+
 		return nil
-		
+
 	end,
 	OnCookieSet = function(requestingFrame : Frame, cookieName : string, value : string, applyingDomains : {string})
-		
+
 		local requestingTab = nil
 
 		for _, tab in pairs(TabDataStorage) do
@@ -182,7 +184,7 @@ local WebView = Loader.new({
 		if not requestingTab then return false end
 
 		local domain = string.split(string.lower(requestingTab.CurrentURL), "/")[1]
-		
+
 		for GUID, cookie in pairs(cookieStorage) do
 			if cookieName == cookie.Name and table.find(cookie.applyingDomains, domain) then
 				cookieStorage[GUID] = {
@@ -193,17 +195,17 @@ local WebView = Loader.new({
 				return true
 			end
 		end
-		
+
 		local cookieGUID = game.HttpService:GenerateGUID(false)
-		
+
 		cookieStorage[cookieGUID] = {
 			Name = cookieName,
 			applyingDomains = applyingDomains,
 			Contents = value,
 		}
-		
+
 		return true
-		
+
 	end,
 	OnHTTPGet = function(requestingFrame : Frame, url : string, parameters : {})
 		return game.ReplicatedStorage.HTTP.GET:InvokeServer(url, parameters)
@@ -254,7 +256,7 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 		CurrentHistoryIndex = 1,
 		IsTabDestructive = true,
 	}
-	
+
 	if intent == "New" then
 		destructive = true
 		tabId = game.HttpService:GenerateGUID(false)
@@ -266,7 +268,7 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 			existingTabData.CurrentURL = url
 
 			do -- compare domains to make sure if destructive is set properly
-				
+
 				local newDomain = string.split(string.lower(sanitizeURL(url)), "/")[1]
 				local oldDomain = string.split(string.lower(sanitizeURL(oldURL)), "/")[1]
 
@@ -275,7 +277,7 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 				else
 					destructive = existingTabData.IsTabDestructive
 				end
-				
+
 			end
 
 			if intent == "Forward" or intent == "ForwardNew" then
@@ -298,11 +300,11 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 				if existingTabData.History[existingTabData.CurrentHistoryIndex+1] == nil and (intent == "ForwardNew" or intent == "ForwardNewUI") then
 					table.insert(existingTabData.History, existingTabData.CurrentHistoryIndex, url)
 				end	
-				
+
 			elseif intent == "Back" and existingTabData.History[existingTabData.CurrentHistoryIndex-1] then
 				existingTabData.CurrentHistoryIndex -= 1
 			end
-			
+
 			tabData = existingTabData
 
 		else	-- treat as new tab
@@ -323,6 +325,7 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 	end
 
 	if intent == "New" then
+		IsURLBookmarked(url, true)
 		CurrentVisibleTab = tabId
 		if table.find(tabSelectCache, tabId) then
 			table.remove(tabSelectCache, table.find(tabSelectCache, tabId))
@@ -378,9 +381,9 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 	local LoadedFrame = nil
 
 	if tabData.Frame == nil or destructive then
-		
+
 		if type(Frame) == "table" then
-			
+
 			if Frame.Contents:IsA("VideoFrame") then
 				local videoContent = Frame.Contents.VideoContent
 				local newVideoViewer = script.DefaultTabs["video-viewer"]:Clone()
@@ -403,14 +406,14 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 				Frame.SiteBackgroundColor3 = Color3.new(0,0,0)
 				Frame.Contents = newAudioPlayer
 			end
-			
+
 			if string.split(tabData.CurrentURL, "?")[2] ~= nil and string.split(Frame.url , "?")[2] == nil then
 				tabData.CurrentURL = Frame.url .. (string.split(tabData.CurrentURL, "?")[2] and ("?" .. string.split(tabData.CurrentURL, "?")[2]) or "")
 				Frame.url = Frame.url .. (string.split(tabData.CurrentURL, "?")[2] and ("?" .. string.split(tabData.CurrentURL, "?")[2]) or "")
 			else
 				tabData.CurrentURL = Frame.url
 			end
-			
+
 			local temp = WebView.LoadFromPrismWebData(Frame, UI.webview)
 			if not Frame.Favicon or Frame.Favicon == "" then
 				Frame.Favicon = "rbxassetid://123070198843762"
@@ -430,7 +433,7 @@ local function loadTab(url : string, intent : "New" | "Back" | "Forward" | "Relo
 			local temp2 = WebView.LoadFromPrismWebData(temp, UI.webview)
 			LoadedFrame = temp
 		end
-		
+
 	else -- this is a tab with already existing data. (since empty tabs are destructive always)
 		tabData.Frame.OnLoaded:Fire(url, extractParametersFromURL(url))
 		LoadedFrame = tabData.Frame
@@ -450,38 +453,38 @@ end
 --hovers
 
 local function toggleHover(hover : string | Frame, override : boolean?)
-	
+
 	if not hover then return end
-	
+
 	if type(hover) == "string" then
 		hover = UI.hoverContainer:FindFirstChild(hover)
 		if not hover then
 			return
 		end
 	end
-	
+
 	local vis = hover.Visible
-	
+
 	for _,v in pairs(UI.hoverContainer:GetChildren()) do
 		if v:IsA("GuiObject") then
 			v.Visible = false
 		end
 	end
 	UI.hoverContainer.Visible = true
-	
+
 	local visibility = nil
 	if override == nil then
 		visibility = not vis
 	else
 		visibility = override
 	end
-	
+
 	if visibility then
 		Animations.HoverOpened(hover.Name, hover)
 	else
 		Animations.HoverClosed(hover.Name, hover)
 	end
-	
+
 end
 
 UI.hoverContainer.InputBegan:Connect(function(input)
@@ -499,36 +502,35 @@ end)
 
 local _lastButtonLink = ""
 local _lastTabId = ""
+local _lastBookmarkURL = ""
 local BrowsingContextMenu = UI.hoverContainer.browsingContextMenu
 local TabContextMenu = UI.hoverContainer.tabContextMenu
+local BookmarkEditMenu = UI.hoverContainer.bookmarkEditMenu
 
 local TargetContextMenus = { -- BrowsingContextMenu is used by default
 	TabButton = TabContextMenu,
+	BookmarkEdit = BookmarkEditMenu,
 }
 
-function openContextMenu(intent : "Open" | "LinkButton" | "TabButton"?, url : string?)
+function openContextMenu(intent : "Open" | "LinkButton" | "TabButton" | "BookmarkEdit"?, url : string?)
 	if intent == nil then intent = "Open" end
-	
+
 	local contextMenu = TargetContextMenus[intent] or BrowsingContextMenu
-	
+
 	local currTab = TabDataStorage[CurrentVisibleTab]
 	local pos = UDim2.fromOffset(mouse.X-UI.AbsolutePosition.X, mouse.Y  - UI.AbsolutePosition.Y)
 
 	if pos.Y.Offset <= UI.topbarbg.Size.Y.Offset and TargetContextMenus[intent] == nil then -- browsing context menu
 		return
 	end
-	
-	local scale = 1 -- change to any affecting UIScale value here
 
-	contextMenu.Position = UDim2.fromOffset(pos.X.Offset/scale, pos.Y.Offset/scale)
-	
 	if contextMenu == BrowsingContextMenu then
 		if intent == "LinkButton" then
 			_lastButtonLink = url
 		else
 			_lastButtonLink = ""
 		end
-		
+
 		contextMenu.forward.Visible = currTab.History[currTab.CurrentHistoryIndex + 1] ~= nil
 		contextMenu.back.Visible = currTab.History[currTab.CurrentHistoryIndex - 1] ~= nil
 		contextMenu.linkButtonDiv.Visible = intent == "LinkButton"
@@ -538,26 +540,44 @@ function openContextMenu(intent : "Open" | "LinkButton" | "TabButton"?, url : st
 		local targetTabData = TabDataStorage[url] -- url argument here is repurposed into tabid
 		_lastTabId = url
 		contextMenu.closeothertabs.Visible = #TabDataStorage > 1
+	elseif contextMenu == BookmarkEditMenu then
+		local existingBookmark = IsURLBookmarked(currTab.CurrentURL)
+		if not existingBookmark then
+			AddBookmark(currTab.CurrentURL, currTab.TabInstance.title.Text, currTab.TabInstance.ico.Image)
+			BookmarkEditMenu.title.Text = "Bookmark Added"
+		else
+			BookmarkEditMenu.title.Text = "Edit Bookmark"
+		end
+		_lastBookmarkURL = currTab.CurrentURL
+		local currBookmarkData = bookmarksData[currTab.CurrentURL]
+		BookmarkEditMenu.bookmarkName.input.Text = currBookmarkData.title
+		BookmarkEditMenu.bookmarkURL.input.Text = currTab.CurrentURL
+		toggleHover(contextMenu, true)
+		return
 	end
-	
+
+	local scale = 1 -- change to any affecting UIScale value here
+
+	contextMenu.Position = UDim2.fromOffset(pos.X.Offset/scale, pos.Y.Offset/scale)
+
 	local xAnchor = 0
 	local yAnchor = 0
-	
+
 	if pos.Y.Offset > UI.AbsoluteSize.Y - contextMenu.AbsoluteSize.Y then
 		yAnchor = 1-((UI.AbsoluteSize.Y-pos.Y.Offset)/contextMenu.AbsoluteSize.Y)
 	end
 	if pos.X.Offset > UI.AbsoluteSize.X - contextMenu.AbsoluteSize.X then
 		xAnchor = 1-((UI.AbsoluteSize.X-pos.X.Offset)/contextMenu.AbsoluteSize.X)
 	end
-	
+
 	contextMenu.AnchorPoint = Vector2.new(xAnchor,yAnchor)
-	
+
 	toggleHover(contextMenu, true)
-	
+
 end
 
 do -- browsing context menu connections
-	
+
 	BrowsingContextMenu.forward.MouseButton1Click:Connect(function()
 		toggleHover("browsingContextMenu", false)
 		local currTab = TabDataStorage[CurrentVisibleTab]
@@ -594,11 +614,11 @@ do -- browsing context menu connections
 			loadTab(_lastButtonLink, "ForwardNew", true, CurrentVisibleTab)
 		end
 	end)
-	
+
 end
 
 do -- tab context menu connections
-	
+
 	TabContextMenu.closetab.MouseButton1Click:Connect(function()
 		toggleHover("tabContextMenu", false)
 		closeTab(_lastTabId)
@@ -620,8 +640,74 @@ do -- tab context menu connections
 			end
 		end
 	end)
-	
+
 end
+
+do -- bookmark context menu connections
+
+	BookmarkEditMenu.bottomButtons.done.MouseButton1Click:Connect(function()
+		toggleHover("bookmarkEditMenu", false)
+		AddBookmark(
+			BookmarkEditMenu.bookmarkURL.input.Text,
+			BookmarkEditMenu.bookmarkName.input.Text,
+			if TabDataStorage[CurrentVisibleTab].CurrentURL == BookmarkEditMenu.bookmarkURL.input.Text then TabDataStorage[CurrentVisibleTab].TabInstance.ico.Image else nil
+		)
+	end)
+
+	BookmarkEditMenu.bottomButtons.delete.MouseButton1Click:Connect(function()
+		toggleHover("bookmarkEditMenu", false)
+		RemoveBookmark(_lastBookmarkURL)
+	end)
+
+end
+
+-- bookmarks
+
+function UpdateBookmarks()
+
+	-- new tab page's bookmarks
+
+	defaultTabData[getBrowserPage(BrowserConfig.DefaultTabsForActions.NewTab)].Contents.bookmarks:ClearAllChildren()
+
+	for url, data in pairs(bookmarksData) do
+		local newConfig = Instance.new("Configuration")
+		newConfig.Parent = defaultTabData[getBrowserPage(BrowserConfig.DefaultTabsForActions.NewTab)].Contents.bookmarks
+		newConfig.Name = url
+		for i, v in pairs(data) do
+			newConfig:SetAttribute(i, v)
+		end
+	end
+
+end
+
+function AddBookmark(url : string, title : string, favicon : string?)
+	bookmarksData[url] = { -- set as table in case of future changes
+		title = title,
+		favicon = favicon or bookmarksData[url] and bookmarksData[url].favicon or "",
+		bookmarkVisits = bookmarksData[url] and bookmarksData[url].bookmarkVisits or 0, -- for sorting
+	}
+	UpdateBookmarks()
+	return true
+end
+function RemoveBookmark(url : string)
+	bookmarksData[url] = nil
+	UpdateBookmarks()
+	return true
+end
+function IsURLBookmarked(url : string, isVisit : boolean?)
+	if isVisit == true and bookmarksData[url] ~= nil then
+		bookmarksData[url].bookmarkVisits += 1
+	end
+	return bookmarksData[url] ~= nil
+end
+
+UpdateBookmarks()
+
+-- connections
+
+UI.topbar.middle.bookmark.MouseButton1Click:Connect(function()
+	openContextMenu("BookmarkEdit")
+end)
 
 -- webview event handling
 
@@ -670,7 +756,7 @@ UI.topbar.middle.urlbar.input.FocusLost:Connect(function(enter)
 	if not enter then return end
 	local url = UI.topbar.middle.urlbar.input.Text
 	local isValidURL = false
-	
+
 	do -- validate url format (x.y or x://y at least)
 		local url = url
 
@@ -684,7 +770,7 @@ UI.topbar.middle.urlbar.input.FocusLost:Connect(function(enter)
 			isValidURL = true
 		end
 	end
-	
+
 	if not isValidURL then
 		url = string.format(BrowserConfig.DefaultSearchEngineConfig.urlFormat, game.HttpService:UrlEncode(url)) -- search instead
 	end
@@ -738,13 +824,13 @@ end)
 -- handling user input (for shortcuts)
 
 UIS.InputBegan:Connect(function(input, gp)
-	
+
 	if input.UserInputType == Enum.UserInputType.MouseButton2 and not gp then
 		openContextMenu("Open")
 	end
-	
+
 	--if gp then return end
-	
+
 	if (UIS:IsKeyDown(Enum.KeyCode.LeftControl) or UIS:IsKeyDown(Enum.KeyCode.RightControl)) and (UIS:IsKeyDown(Enum.KeyCode.LeftShift) or UIS:IsKeyDown(Enum.KeyCode.RightShift)) then
 		if input.KeyCode == Enum.KeyCode.K then -- duplicate current tab
 			local currTab = TabDataStorage[CurrentVisibleTab]
@@ -776,12 +862,12 @@ end)
 -- initialize default tabs
 
 do -- about
-	
+
 	local success, err = pcall(function()
 
 		local tab = script.DefaultTabs.about
 
-		local bodyText = "Prism WebView Engine Version: {{ver}}<br/>Prism Browser Version: {{ui_ver}}"
+		local bodyText = Strings.ui.aboutPage.text
 		local finalText = bodyText
 
 		finalText = finalText:gsub("{{ver}}", WebView.WebViewVersion)
@@ -791,11 +877,11 @@ do -- about
 		tab.body.Text = finalText
 
 	end)
-	
+
 	if not success then
 		warn("unable to initialize 'about browser' page: " .. err)
 	end
-	
+
 end
 
 do -- new tab
@@ -803,10 +889,10 @@ do -- new tab
 	local success, err = pcall(function()
 
 		local tab = script.DefaultTabs["new-tab"]
-		
+
 		tab.DefaultSearchEngineConfig:SetAttribute("name", BrowserConfig.DefaultSearchEngineConfig.name)
 		tab.DefaultSearchEngineConfig:SetAttribute("urlFormat", BrowserConfig.DefaultSearchEngineConfig.urlFormat)
-		
+
 	end)
 
 	if not success then
@@ -835,7 +921,7 @@ game:GetService("RunService").RenderStepped:Connect(function()
 	if #TabDataStorage == 0 then -- never allow 0 tabs open
 		loadTab(getBrowserPage(BrowserConfig.DefaultTabsForActions.NewTab), "New", true)
 	end
-	
+
 	UI.topbar.middle.urlbar.input.PlaceholderText = string.format(Strings.ui.urlbar.placeholderFormat, BrowserConfig.DefaultSearchEngineConfig.name)
 
 	for _,v in pairs(UI.webview:GetChildren()) do
@@ -858,6 +944,18 @@ game:GetService("RunService").RenderStepped:Connect(function()
 		if currTab then
 			UI.topbar.leftside.forward.Visible = currTab.History[currTab.CurrentHistoryIndex + 1] ~= nil
 			UI.topbar.leftside.back.ico.ImageTransparency = currTab.History[currTab.CurrentHistoryIndex - 1] ~= nil and 0 or 0.5
+		end	
+
+	end
+
+	do -- bookmarks
+
+		local currTab = TabDataStorage[CurrentVisibleTab]
+
+		if currTab then
+			local isCurrURLBookmarked = IsURLBookmarked(currTab.CurrentURL)
+			UI.topbar.middle.bookmark.idle.Visible = not isCurrURLBookmarked
+			UI.topbar.middle.bookmark.filled.Visible = isCurrURLBookmarked
 		end	
 
 	end
